@@ -1,0 +1,53 @@
+pipeline{
+    agent any
+    environment {
+        DOCKERHUB_CREDENTIALS=credentials('login-docker')
+    }
+    stages{
+        stage('fetch-code'){
+           steps {
+               sh '''
+               cd  /proj2/jenkins-demo
+               git pull
+               '''
+           } 
+        }
+        stage('build-image'){
+            steps {
+                sh '''
+                cd /proj2/jenkins-demo
+                docker build -t jenkins-app .
+                '''
+            }
+        }
+        stage('Login to docker hub'){
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | sudo docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                echo 'login completed'
+            }
+        }
+        stage('push-image'){
+            steps {
+                sh '''
+                docker tag jenkins-app mithleshmurmu/jenkin-app:2.0
+                docker push mithleshmurmu/jenkin-app:2.0
+                '''
+            }
+        }
+        stage('deploy-image'){
+            steps {
+                sh '''
+                ssh -t hpcsa@192.168.144.151 sudo docker pull mithleshmurmu/jenkin-app:2.0
+                ssh -t hpcsa@192.168.144.151 sudo docker stop webapp
+                ssh -t hpcsa@192.168.144.151 sudo docker rm webapp
+                ssh -t hpcsa@192.168.144.151 sudo docker run --name webapp -p 8000:80 -d mithleshmurmu/jenkin-app:2.0
+                '''
+            }
+        }
+    }
+    post{
+        always{
+            sh 'docker logout'
+        }
+    }
+}
