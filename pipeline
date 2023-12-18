@@ -1,0 +1,58 @@
+pipeline{
+    agent any
+    environment {
+        DOCKERHUB_CREDENTIALS= credentials('docker-login')     
+    }
+    stages{
+        stage('fetch-code'){
+            steps{
+                sh '''
+                cd /code1/jenkins-apps/
+                git pull
+                '''
+            }
+        }
+        stage('build-image'){
+            steps{
+                sh '''
+                cd /code1/jenkins-apps/
+                docker build -t mithleshmurmu/myjenkins-apps:$BUILD_NUMBER .
+                '''
+            }
+            
+        }
+        stage('Login to Docker'){
+            steps{
+                sh '''
+                echo $DOCKERHUB_CREDENTIALS_PSW | sudo docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
+                '''
+                echo "Login Successful"
+            }
+        }
+        stage('push-image'){
+            steps{
+                sh '''
+                docker push mithleshmurmu/myjenkins-apps:$BUILD_NUMBER
+                '''
+            }
+            
+        }
+        stage('deploy-image'){
+            steps{
+                sh '''
+                ssh -t devops@192.168.144.151 sudo docker pull mithleshmurmu/myjenkins-apps:$BUILD_NUMBER
+                #ssh -t devops@192.168.144.151 sudo docker stop myweb
+                ssh -t devops@192.168.144.151 sudo docker service rm myweb
+                ssh -t devops@192.168.144.151 sudo docker service create --name myweb -p 5500:80 -d mithleshmurmu/myjenkins-apps:$BUILD_NUMBER
+                ssh -t devops@192.168.144.151 sudo docker service scale myweb=10
+                '''
+                
+            }
+        }
+    }
+    post {
+        always {
+            sh 'docker logout'
+        }
+    }
+}
